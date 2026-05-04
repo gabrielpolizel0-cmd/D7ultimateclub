@@ -1,0 +1,75 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: #0a0e14;
+    color: #e8ecf2;
+    font-family: "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: linear-gradient(rgba(0, 229, 180, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 229, 180, 0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+  }
+}
+
+@layer components {
+  .glow-bg {
+    position: fixed;
+    top: -200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 600px;
+    background: radial-gradient(ellipse, rgba(0, 229, 180, 0.25) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.6;
+  }
+
+  .container-custom {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg font-semibold text-sm bg-accent text-bg transition-all duration-150 hover:bg-accent-deep hover:-translate-y-px hover:shadow-[0_0_24px_rgba(0,229,180,0.4)];
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg font-semibold text-sm bg-bg-card text-text border border-border transition-all duration-150 hover:border-accent hover:text-accent;
+  }
+
+  .pulse-dot {
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+}
