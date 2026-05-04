@@ -69,27 +69,19 @@ export default function Header() {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
           <div className="w-10 h-10 bg-emerald-400 rounded flex items-center justify-center">
-            <span className="text-black font-bold text-xl">H</span>
+            <span className="text-black font-bold text-xl">D</span>
           </div>
-          <span className="text-xl font-bold">Howling</span>
+          <span className="text-xl font-bold">D7 Ultimate Club</span>
         </Link>
 
-        {/* Menu de navegação */}
+        {/* Menu de navegacao */}
         <nav className="hidden md:flex items-center gap-6">
-          <Link href="/" className="text-emerald-400 font-medium">Início</Link>
+          <Link href="/" className="text-gray-400 hover:text-white transition-colors">Inicio</Link>
           <Link href="/torneios" className="text-gray-400 hover:text-white transition-colors">Torneios</Link>
-          <Link href="/ranking" className="text-gray-400 hover:text-white transition-colors">Ranking</Link>
-          <Link href="/perfil" className="text-gray-400 hover:text-white transition-colors">Meu perfil</Link>
         </nav>
 
-        {/* Área de usuário */}
+        {/* Area de usuario */}
         <div className="flex items-center gap-3">
-          {/* Status AO VIVO */}
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 border border-red-500/30 rounded-full bg-red-500/10">
-            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-            <span className="text-xs font-bold text-red-400">3 AO VIVO</span>
-          </div>
-
           {loading ? (
             <div className="w-32 h-10 bg-gray-900 rounded animate-pulse"></div>
           ) : player ? (
@@ -98,7 +90,7 @@ export default function Header() {
                 onClick={() => setMenuOpen(!menuOpen)}
                 className="flex items-center gap-3 px-3 py-1.5 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg transition-colors"
               >
-                {/* Ícone do summoner com fallback automático */}
+                {/* Icone do summoner com fallback automatico */}
                 {getProfileIconUrl(player.profile_icon_id) && !imageError ? (
                   <img
                     src={getProfileIconUrl(player.profile_icon_id)!}
@@ -135,19 +127,11 @@ export default function Header() {
                     <p className="text-xs text-gray-400">Level {player.summoner_level}</p>
                   </div>
                   
-                  <Link
-                    href="/perfil"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-4 py-3 text-sm hover:bg-gray-800 transition-colors"
-                  >
-                    👤 Meu perfil
-                  </Link>
-                  
                   <button
                     onClick={handleLogout}
-                    className="w-full text-left px-4 py-3 text-sm hover:bg-red-900/30 text-red-400 transition-colors border-t border-gray-800"
+                    className="w-full text-left px-4 py-3 text-sm hover:bg-red-900/30 text-red-400 transition-colors"
                   >
-                    🚪 Sair
+                    Sair
                   </button>
                 </div>
               )}
