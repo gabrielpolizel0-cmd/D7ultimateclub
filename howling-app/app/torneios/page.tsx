@@ -1,65 +1,102 @@
-import TournamentCard from "@/components/TournamentCard";
-import { tournaments } from "@/data/tournaments";
-import { Tournament } from "@/lib/types";
+import { supabase, Tournament } from '@/lib/supabaseClient';
 
-export default function TorneiosPage() {
-  const live = tournaments.filter((t) => t.status === "live");
-  const open = tournaments.filter((t) => t.status === "open");
-  const soon = tournaments.filter((t) => t.status === "soon");
+// Faz a página buscar dados a cada requisição (sem cache)
+export const dynamic = 'force-dynamic';
 
-  return (
-    <div className="container-custom py-12">
-      <div className="mb-10">
-        <div className="font-mono text-[11px] text-text-dim uppercase tracking-widest mb-2">
-          Torneios
-        </div>
-        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-          Encontre seu próximo torneio
-        </h1>
-        <p className="text-text-soft mt-3 max-w-2xl">
-          Daily ARAM grátis todo dia às 19h. Weekly Cups aos sábados com premiação. Liga mensal pra
-          quem quer pontos corridos. Escolha seu formato.
-        </p>
-      </div>
-
-      {live.length > 0 && (
-        <Section title="Ao vivo agora" subtitle="Torneios em andamento" tournaments={live} />
-      )}
-
-      {open.length > 0 && (
-        <Section
-          title="Inscrições abertas"
-          subtitle="Entre antes que feche"
-          tournaments={open}
-        />
-      )}
-
-      {soon.length > 0 && (
-        <Section title="Em breve" subtitle="Programados pra essa semana" tournaments={soon} />
-      )}
-    </div>
-  );
+async function getTournaments(): Promise<Tournament[]> {
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('*')
+    .order('start_date', { ascending: true });
+  
+  if (error) {
+    console.error('Erro ao buscar torneios:', error);
+    return [];
+  }
+  
+  return data || [];
 }
 
-function Section({
-  title,
-  subtitle,
-  tournaments,
-}: {
-  title: string;
-  subtitle: string;
-  tournaments: Tournament[];
-}) {
+function formatDate(dateString: string) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function statusLabel(status: string) {
+  const labels: Record<string, { text: string; color: string }> = {
+    upcoming: { text: '🟢 Em breve', color: 'text-emerald-400' },
+    live: { text: '🔴 AO VIVO', color: 'text-red-400' },
+    finished: { text: '⚫ Finalizado', color: 'text-gray-400' },
+    cancelled: { text: '⚠️ Cancelado', color: 'text-yellow-400' },
+  };
+  return labels[status] || { text: status, color: 'text-gray-400' };
+}
+
+export default async function TorneiosPage() {
+  const tournaments = await getTournaments();
+
   return (
-    <div className="mb-12">
-      <div className="mb-5">
-        <h2 className="text-xl font-bold tracking-tight">{title}</h2>
-        <div className="text-sm text-text-soft mt-1">{subtitle}</div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {tournaments.map((t) => (
-          <TournamentCard key={t.slug} tournament={t} />
-        ))}
+    <div className="min-h-screen bg-black text-white p-8">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-4xl font-bold mb-2">🏆 Torneios</h1>
+        <p className="text-gray-400 mb-8">
+          {tournaments.length === 0 
+            ? 'Nenhum torneio cadastrado ainda.' 
+            : `${tournaments.length} torneio(s) cadastrado(s).`}
+        </p>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          {tournaments.map((tournament) => {
+            const status = statusLabel(tournament.status);
+            return (
+              <div
+                key={tournament.id}
+                className="p-6 bg-gray-900 border border-gray-800 rounded-lg hover:border-emerald-500 transition-colors"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <h2 className="text-2xl font-bold">{tournament.name}</h2>
+                  <span className={`text-sm font-bold ${status.color}`}>
+                    {status.text}
+                  </span>
+                </div>
+
+                {tournament.description && (
+                  <p className="text-gray-400 text-sm mb-4">
+                    {tournament.description}
+                  </p>
+                )}
+
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-500 uppercase text-xs">Modo</p>
+                    <p className="font-bold">{tournament.game_mode}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 uppercase text-xs">Vagas</p>
+                    <p className="font-bold">{tournament.max_teams} times</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 uppercase text-xs">Premiação</p>
+                    <p className="font-bold text-emerald-400">
+                      R$ {Number(tournament.prize_pool).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-gray-800">
+                  <p className="text-xs text-gray-500">📅 INÍCIO</p>
+                  <p className="font-bold">{formatDate(tournament.start_date)}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
