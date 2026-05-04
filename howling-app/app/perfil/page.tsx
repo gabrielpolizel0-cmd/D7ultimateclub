@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
-import { getTierAndDivision, getNextTierProgress } from '@/lib/ranking';
+import { getNextTierProgress } from '@/lib/ranking';
 
 interface Player {
   id: string;
@@ -23,22 +23,6 @@ interface Player {
   pix_key_type: string | null;
 }
 
-interface AramMatch {
-  id: string;
-  riot_match_id: string;
-  played_at: string;
-  duration_seconds: number;
-  champion_name: string | null;
-  kills: number;
-  deaths: number;
-  assists: number;
-  kda: number;
-  result: string;
-  was_qualification: boolean;
-  points_change: number;
-  points_after: number;
-}
-
 const TIER_COLORS: Record<string, string> = {
   UNRANKED: 'text-gray-500 border-gray-700',
   BRONZE: 'text-orange-700 border-orange-700',
@@ -53,7 +37,6 @@ const TIER_COLORS: Record<string, string> = {
 export default function PerfilPage() {
   const router = useRouter();
   const [player, setPlayer] = useState<Player | null>(null);
-  const [matches, setMatches] = useState<AramMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -88,16 +71,6 @@ export default function PerfilPage() {
     setPlayer(playerData);
     setPixKey(playerData.pix_key || '');
     setPixKeyType(playerData.pix_key_type || 'email');
-
-    // Carrega ultimas 20 partidas
-    const { data: matchesData } = await supabase
-      .from('aram_matches')
-      .select('*')
-      .eq('player_id', playerData.id)
-      .order('played_at', { ascending: false })
-      .limit(20);
-
-    setMatches(matchesData || []);
     setLoading(false);
   }
 
@@ -167,16 +140,12 @@ export default function PerfilPage() {
     ? ((player.aram_total_wins / totalMatches) * 100).toFixed(1)
     : '0.0';
 
-  const avgKda = matches.length > 0
-    ? (matches.reduce((sum, m) => sum + Number(m.kda), 0) / matches.length).toFixed(2)
-    : '0.00';
-
   const tierColor = TIER_COLORS[player.d7_tier] || TIER_COLORS.UNRANKED;
   const progress = !isQualifying ? getNextTierProgress(player.d7_points) : null;
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="max-w-6xl mx-auto px-6 py-10">
+      <div className="max-w-4xl mx-auto px-6 py-10">
         {/* Cabecalho */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-1">Meu Perfil</h1>
@@ -187,7 +156,7 @@ export default function PerfilPage() {
 
         {/* Card de Rank */}
         <div className={`mb-8 p-8 bg-gray-900/50 border-2 rounded-2xl ${tierColor}`}>
-          <p className="text-xs uppercase tracking-widest text-gray-500 mb-2">D7 Rank</p>
+          <p className="text-xs uppercase tracking-widest text-gray-500 mb-2">D7 Rank · ARAM Desordem</p>
 
           {isQualifying ? (
             <div>
@@ -256,30 +225,14 @@ export default function PerfilPage() {
         </div>
 
         {/* Estatisticas ARAM */}
-        <div className="mb-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Stat label="Partidas" value={String(totalMatches)} />
-          <Stat label="Vitórias" value={String(player.aram_total_wins)} color="text-emerald-400" />
-          <Stat label="Derrotas" value={String(player.aram_total_losses)} color="text-red-400" />
-          <Stat label="Win Rate" value={`${winrate}%`} />
-        </div>
-
-        {/* Ultimas Partidas */}
         <div className="mb-8">
-          <h2 className="text-xl font-bold mb-4">Últimas partidas ARAM</h2>
-          {matches.length === 0 ? (
-            <div className="p-8 bg-gray-900/50 border border-gray-800 rounded-lg text-center">
-              <p className="text-gray-400 text-sm">
-                Nenhuma partida sincronizada ainda. Clica em &quot;Atualizar minhas partidas&quot; pra puxar
-                seu histórico do LoL.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {matches.map((m) => (
-                <MatchRow key={m.id} match={m} />
-              ))}
-            </div>
-          )}
+          <h2 className="text-xl font-bold mb-4">Estatísticas ARAM Desordem</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Stat label="Partidas" value={String(totalMatches)} />
+            <Stat label="Vitórias" value={String(player.aram_total_wins)} color="text-emerald-400" />
+            <Stat label="Derrotas" value={String(player.aram_total_losses)} color="text-red-400" />
+            <Stat label="Win Rate" value={`${winrate}%`} />
+          </div>
         </div>
 
         {/* Chave PIX */}
@@ -336,56 +289,6 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
     <div className="p-4 bg-gray-900/50 border border-gray-800 rounded-lg">
       <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{label}</p>
       <p className={`text-2xl font-bold font-mono ${color || 'text-white'}`}>{value}</p>
-    </div>
-  );
-}
-
-function MatchRow({ match }: { match: AramMatch }) {
-  const isWin = match.result === 'win';
-  const date = new Date(match.played_at);
-  const dateStr = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-  const timeStr = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  const minutes = Math.floor(match.duration_seconds / 60);
-
-  return (
-    <div className={`p-3 border rounded-lg flex items-center gap-3 ${
-      isWin ? 'bg-emerald-900/10 border-emerald-900/40' : 'bg-red-900/10 border-red-900/40'
-    }`}>
-      <div className={`w-2 h-12 rounded ${isWin ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-      <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
-        <div>
-          <p className={`font-bold ${isWin ? 'text-emerald-400' : 'text-red-400'}`}>
-            {isWin ? 'VITÓRIA' : 'DERROTA'}
-          </p>
-          <p className="text-xs text-gray-500">{dateStr} {timeStr}</p>
-        </div>
-        <div>
-          <p className="text-gray-400 text-xs">Campeão</p>
-          <p className="font-medium">{match.champion_name || '?'}</p>
-        </div>
-        <div>
-          <p className="text-gray-400 text-xs">KDA</p>
-          <p className="font-mono">
-            {match.kills}/{match.deaths}/{match.assists}{' '}
-            <span className="text-gray-500">({Number(match.kda).toFixed(2)})</span>
-          </p>
-        </div>
-        <div>
-          <p className="text-gray-400 text-xs">Duração</p>
-          <p className="font-mono">{minutes}min</p>
-        </div>
-        <div>
-          <p className="text-gray-400 text-xs">
-            Pontos {match.was_qualification && <span className="text-yellow-400">(Q)</span>}
-          </p>
-          <p className={`font-mono font-bold ${
-            match.points_change > 0 ? 'text-emerald-400' : 'text-red-400'
-          }`}>
-            {match.points_change > 0 ? '+' : ''}
-            {match.points_change}
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

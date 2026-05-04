@@ -7,7 +7,8 @@ if (!RIOT_API_KEY) {
 const AMERICAS_BASE = 'https://americas.api.riotgames.com';
 const BR1_BASE = 'https://br1.api.riotgames.com';
 
-const ARAM_QUEUE_ID = 450;
+// ARAM Mayhem (ARAM Desordem em PT-BR) - queue oficial da Riot
+const ARAM_QUEUE_ID = 2400;
 
 interface RiotAccount {
   puuid: string;
@@ -80,7 +81,7 @@ async function riotFetch(url: string) {
 }
 
 // ============================================
-// FUNCOES BASICAS (ja existentes)
+// FUNCOES DE CONTA E PERFIL
 // ============================================
 
 export async function getAccountByRiotId(gameName: string, tagLine: string): Promise<RiotAccount> {
@@ -119,14 +120,11 @@ export async function getFullPlayerData(gameName: string, tagLine: string): Prom
 }
 
 // ============================================
-// FUNCOES NOVAS PRA SISTEMA DE RANKING ARAM
+// FUNCOES DE PARTIDAS ARAM DESORDEM (Mayhem)
 // ============================================
 
 /**
- * Pega os IDs das ultimas partidas ARAM do jogador.
- * @param puuid PUUID do jogador
- * @param count quantas partidas pegar (max 100)
- * @param startTime timestamp (em segundos) - so partidas APOS esse momento
+ * Pega os IDs das ultimas partidas ARAM Desordem do jogador.
  */
 export async function getAramMatchIds(
   puuid: string,
@@ -159,7 +157,6 @@ export async function getMatchSummaryForPlayer(
 ): Promise<MatchSummary | null> {
   const match = await getMatchDetails(matchId);
 
-  // Encontra o participante que e o jogador
   const participant = match.info.participants.find((p: any) => p.puuid === puuid);
 
   if (!participant) {
@@ -185,15 +182,13 @@ export async function getMatchSummaryForPlayer(
 }
 
 /**
- * Pega resumos de varias partidas de uma vez (busca em paralelo).
- * @param matchIds Array de IDs de partidas
- * @param puuid PUUID do jogador (pra extrair so dele)
+ * Pega resumos de varias partidas em paralelo.
  */
 export async function getMatchSummaries(
   matchIds: string[],
   puuid: string
 ): Promise<MatchSummary[]> {
-  const promises = matchIds.map((id) => 
+  const promises = matchIds.map((id) =>
     getMatchSummaryForPlayer(id, puuid).catch((e) => {
       console.warn(`[riot.ts] erro pegando match ${id}:`, e.message);
       return null;
