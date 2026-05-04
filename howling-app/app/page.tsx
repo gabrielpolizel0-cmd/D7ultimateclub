@@ -11,6 +11,8 @@ interface Tournament {
   game_mode: string;
   start_date: string;
   max_teams: number;
+  team_size: number | null;
+  entry_fee: number | null;
   prize_pool: number | null;
   status: string;
   format: string | null;
@@ -24,7 +26,13 @@ async function getTournaments() {
   return (data as Tournament[]) || [];
 }
 
+// Considera "data placeholder" qualquer ano >= 2050 (uso 2099 como sentinel)
+function isPlaceholderDate(iso: string) {
+  return new Date(iso).getFullYear() >= 2050;
+}
+
 function formatDate(iso: string) {
+  if (isPlaceholderDate(iso)) return "Em breve";
   return new Date(iso).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "long",
@@ -34,6 +42,11 @@ function formatDate(iso: string) {
   });
 }
 
+function formatBRL(value: number | null | undefined) {
+  if (!value && value !== 0) return null;
+  return `R$ ${Number(value).toLocaleString("pt-BR")}`;
+}
+
 function statusBadge(status: string) {
   if (status === "live")
     return { label: "AO VIVO", classes: "bg-red-500/15 border-red-500 text-red-400" };
@@ -41,6 +54,8 @@ function statusBadge(status: string) {
     return { label: "EM BREVE", classes: "bg-emerald-500/15 border-emerald-500 text-emerald-400" };
   if (status === "finished")
     return { label: "ENCERRADO", classes: "bg-gray-500/15 border-gray-500 text-gray-400" };
+  if (status === "cancelled")
+    return { label: "CANCELADO", classes: "bg-gray-500/15 border-gray-500 text-gray-400" };
   return { label: status.toUpperCase(), classes: "bg-gray-500/15 border-gray-500 text-gray-400" };
 }
 
@@ -69,14 +84,13 @@ export default async function HomePage() {
             <h1 className="relative text-4xl sm:text-5xl md:text-6xl font-extrabold leading-[1.05] tracking-tight mb-4">
               Torneios de{" "}
               <span className="bg-gradient-to-br from-accent to-accent-deep bg-clip-text text-transparent">
-                League of Legends
+                ARAM Desordem
               </span>{" "}
               com premiação real
             </h1>
             <p className="relative text-text-soft text-base md:text-lg max-w-xl mb-8">
-              Conecte sua conta Riot, inscreva-se em torneios oficiais do D7 Ultimate Club, e dispute
-              chaves eliminatórias com jogadores de todos os níveis. Modalidade ARAM, Summoner's Rift
-              e Arena.
+              Junte sua equipe de 5 jogadores, inscreva-se em torneios oficiais do D7 Ultimate Club
+              e dispute chaves eliminatórias com premiações que vão de R$ 600 até R$ 18.000.
             </p>
             <HomeCTAs />
           </div>
@@ -84,7 +98,7 @@ export default async function HomePage() {
           {/* Próximo torneio (real, do Supabase) */}
           <div className="bg-bg-elevated border border-border rounded-2xl p-6 flex flex-col">
             <div className="font-mono text-[11px] text-text-dim uppercase tracking-widest mb-4">
-              {nextTournament ? "Próximo torneio" : "Em breve"}
+              {nextTournament ? "Próximo torneio" : "Sem torneios"}
             </div>
 
             {nextTournament ? (
@@ -92,11 +106,15 @@ export default async function HomePage() {
                 <div>
                   <div className="text-lg font-bold mb-1">{nextTournament.name}</div>
                   <div className="text-[13px] text-text-soft mb-3">
-                    {formatDate(nextTournament.start_date)} · {nextTournament.max_teams} vagas
-                    {nextTournament.prize_pool ? ` · R$ ${nextTournament.prize_pool}` : ""}
+                    {formatDate(nextTournament.start_date)} · {nextTournament.max_teams} times
+                    {nextTournament.prize_pool
+                      ? ` · ${formatBRL(nextTournament.prize_pool)}`
+                      : ""}
                   </div>
                   {nextTournament.description && (
-                    <p className="text-sm text-text-soft mb-5">{nextTournament.description}</p>
+                    <p className="text-sm text-text-soft mb-5 line-clamp-4">
+                      {nextTournament.description}
+                    </p>
                   )}
                 </div>
                 <Link
@@ -133,8 +151,8 @@ export default async function HomePage() {
             />
             <Step
               n="2"
-              title="Escolha um torneio"
-              desc="Veja os torneios abertos e clique em inscrever-se. É grátis."
+              title="Monte seu time"
+              desc="Junte 5 jogadores e escolha um torneio aberto. Cada um paga sua inscrição via PIX."
             />
             <Step
               n="3"
@@ -152,7 +170,7 @@ export default async function HomePage() {
 
       {/* Torneios em destaque (reais) */}
       {featured.length > 0 && (
-        <section className="py-8">
+        <section className="py-8 pb-16">
           <div className="container-custom">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-xl md:text-2xl font-bold tracking-tight">Torneios em destaque</h2>
@@ -167,15 +185,16 @@ export default async function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {featured.map((t) => {
                 const badge = statusBadge(t.status);
+                const dateLabel = formatDate(t.start_date);
                 return (
                   <Link
                     key={t.id}
                     href={`/torneios/${t.id}`}
-                    className="bg-bg-elevated border border-border rounded-2xl p-5 hover:border-accent transition-colors group"
+                    className="bg-bg-elevated border border-border rounded-2xl p-5 hover:border-accent transition-colors group flex flex-col"
                   >
                     <div className="flex items-center justify-between mb-3">
                       <span className="px-2.5 py-0.5 bg-bg-card border border-border rounded text-[10px] font-mono uppercase text-text-soft">
-                        {t.game_mode}
+                        ARAM Desordem
                       </span>
                       <span
                         className={`px-2.5 py-0.5 border rounded-full text-[10px] font-bold uppercase tracking-wider ${badge.classes}`}
@@ -183,24 +202,34 @@ export default async function HomePage() {
                         {badge.label}
                       </span>
                     </div>
+
                     <h3 className="text-lg font-bold mb-2 group-hover:text-accent transition-colors">
                       {t.name}
                     </h3>
+
                     {t.description && (
-                      <p className="text-xs text-text-soft mb-4 line-clamp-2">{t.description}</p>
+                      <p className="text-xs text-text-soft mb-4 line-clamp-3">{t.description}</p>
                     )}
-                    <div className="flex justify-between text-xs">
-                      <div>
-                        <div className="text-text-dim uppercase font-mono text-[10px]">Início</div>
-                        <div className="text-text mt-0.5">{formatDate(t.start_date)}</div>
-                      </div>
+
+                    {/* spacer pra empurrar os numeros pra baixo */}
+                    <div className="flex-1" />
+
+                    {/* Detalhes financeiros */}
+                    <div className="pt-3 border-t border-border space-y-1.5">
+                      <DetailRow label="Início" value={dateLabel} />
+                      <DetailRow label="Times" value={`${t.max_teams} times`} />
+                      {t.entry_fee !== null && t.entry_fee !== undefined && (
+                        <DetailRow
+                          label="Inscrição"
+                          value={`${formatBRL(t.entry_fee)} / jogador`}
+                        />
+                      )}
                       {t.prize_pool && (
-                        <div className="text-right">
-                          <div className="text-text-dim uppercase font-mono text-[10px]">
-                            Prêmio
-                          </div>
-                          <div className="text-accent font-bold mt-0.5">R$ {t.prize_pool}</div>
-                        </div>
+                        <DetailRow
+                          label="Prêmio do time"
+                          value={formatBRL(t.prize_pool) || "—"}
+                          highlight
+                        />
                       )}
                     </div>
                   </Link>
@@ -222,6 +251,23 @@ function Step({ n, title, desc }: { n: string; title: string; desc: string }) {
       </div>
       <div className="font-bold mb-1.5">{title}</div>
       <p className="text-xs text-text-soft leading-relaxed">{desc}</p>
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="text-text-dim uppercase font-mono text-[10px]">{label}</span>
+      <span className={highlight ? "text-accent font-bold" : "text-text"}>{value}</span>
     </div>
   );
 }
