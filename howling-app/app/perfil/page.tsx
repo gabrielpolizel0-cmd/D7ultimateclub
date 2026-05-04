@@ -44,6 +44,7 @@ export default function PerfilPage() {
   const [pixKeyType, setPixKeyType] = useState('email');
   const [savingPix, setSavingPix] = useState(false);
   const [pixSaved, setPixSaved] = useState(false);
+  const [debugLoading, setDebugLoading] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -101,6 +102,39 @@ export default function PerfilPage() {
       setSyncMessage(`Erro: ${e.message}`);
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function handleDebug() {
+    setDebugLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert('Voce precisa estar logado');
+        return;
+      }
+
+      const res = await fetch('/api/debug-queues', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+      });
+      const data = await res.json();
+
+      console.log('==== DEBUG QUEUES ====');
+      console.log(data);
+      console.log('======================');
+
+      // Mostra um resumo no alert (compacto)
+      const resumo = data.partidas
+        ? data.partidas.map((p: any) =>
+            `Q${p.queueId} | ${p.gameMode} | ${p.campeao} ${p.kda} | ${p.jogadoEm}`
+          ).join('\n')
+        : JSON.stringify(data, null, 2);
+
+      alert('Resultado (veja tambem o Console F12):\n\n' + resumo);
+    } catch (e: any) {
+      alert('Erro: ' + e.message);
+    } finally {
+      setDebugLoading(false);
     }
   }
 
@@ -199,8 +233,8 @@ export default function PerfilPage() {
           )}
         </div>
 
-        {/* Botao de sincronizar */}
-        <div className="mb-8">
+        {/* Botoes de a‪ção */}
+        <div className="mb-8 flex flex-wrap gap-3">
           <button
             onClick={handleSync}
             disabled={syncing}
@@ -208,21 +242,31 @@ export default function PerfilPage() {
           >
             {syncing ? 'Sincronizando partidas...' : 'Atualizar minhas partidas'}
           </button>
-          {player.last_match_synced_at && (
-            <p className="text-xs text-gray-500 mt-2">
-              Última sincronização: {new Date(player.last_match_synced_at).toLocaleString('pt-BR')}
-            </p>
-          )}
-          {syncMessage && (
-            <div className={`mt-3 p-3 rounded-lg text-sm ${
-              syncMessage.startsWith('Erro')
-                ? 'bg-red-900/30 border border-red-700 text-red-300'
-                : 'bg-emerald-900/30 border border-emerald-700 text-emerald-300'
-            }`}>
-              {syncMessage}
-            </div>
-          )}
+
+          <button
+            onClick={handleDebug}
+            disabled={debugLoading}
+            className="px-4 py-3 bg-yellow-700 hover:bg-yellow-600 disabled:bg-gray-700 text-white text-sm rounded-lg transition-colors"
+          >
+            {debugLoading ? 'Buscando...' : '🔍 Debug Queues'}
+          </button>
         </div>
+
+        {player.last_match_synced_at && (
+          <p className="text-xs text-gray-500 -mt-6 mb-6">
+            Última sincronização: {new Date(player.last_match_synced_at).toLocaleString('pt-BR')}
+          </p>
+        )}
+
+        {syncMessage && (
+          <div className={`mb-6 p-3 rounded-lg text-sm ${
+            syncMessage.startsWith('Erro')
+              ? 'bg-red-900/30 border border-red-700 text-red-300'
+              : 'bg-emerald-900/30 border border-emerald-700 text-emerald-300'
+          }`}>
+            {syncMessage}
+          </div>
+        )}
 
         {/* Estatisticas ARAM */}
         <div className="mb-8">
