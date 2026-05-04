@@ -28,30 +28,20 @@ export const TIER_THRESHOLDS = [
 export type Tier = typeof TIER_THRESHOLDS[number]['tier'];
 export type Division = 'I' | 'II' | 'III' | 'IV';
 
-const DIVISIONS_PER_TIER = 4;
-const POINTS_PER_DIVISION = 125; // 500 / 4 = 125 pts entre divisoes
+const POINTS_PER_DIVISION = 125;
 
 export interface RankInfo {
   tier: Tier | 'UNRANKED';
   division: Division | null;
   points: number;
   isQualifying: boolean;
-  qualificationProgress: number; // 0 a 10
+  qualificationProgress: number;
 }
 
-/**
- * Calcula o tier e divisao baseado em pontos totais.
- * MASTER e ULTIMATE nao tem divisoes (so o tier).
- */
 export function getTierAndDivision(points: number): { tier: Tier; division: Division | null } {
-  // ULTIMATE: 3000+ (sem divisao)
   if (points >= 3000) return { tier: 'ULTIMATE', division: null };
-
-  // MASTER: 2500-2999 (sem divisao)
   if (points >= 2500) return { tier: 'MASTER', division: null };
 
-  // Demais tiers tem 4 divisoes (IV, III, II, I)
-  // Cada tier tem 500 pontos, divididos em 4 = 125 pts cada
   const tierData = [...TIER_THRESHOLDS]
     .reverse()
     .find((t) => points >= t.minPoints && t.tier !== 'MASTER' && t.tier !== 'ULTIMATE');
@@ -63,16 +53,12 @@ export function getTierAndDivision(points: number): { tier: Tier; division: Divi
   const pointsInTier = points - tierData.minPoints;
   const divisionIndex = Math.floor(pointsInTier / POINTS_PER_DIVISION);
 
-  // 0 = IV, 1 = III, 2 = II, 3 = I
   const divisions: Division[] = ['IV', 'III', 'II', 'I'];
   const division = divisions[Math.min(divisionIndex, 3)];
 
   return { tier: tierData.tier, division };
 }
 
-/**
- * Quantos pontos faltam pra subir de divisao/tier.
- */
 export function getNextTierProgress(points: number): {
   nextTierLabel: string;
   pointsNeeded: number;
@@ -86,7 +72,6 @@ export function getNextTierProgress(points: number): {
     };
   }
 
-  // Encontra o proximo threshold
   const next = TIER_THRESHOLDS.find((t) => t.minPoints > points);
   if (!next) {
     return {
@@ -99,7 +84,6 @@ export function getNextTierProgress(points: number): {
   const current = [...TIER_THRESHOLDS].reverse().find((t) => t.minPoints <= points);
   const currentMin = current?.minPoints || 0;
 
-  // Se ainda esta dentro de um tier com divisoes, calcula divisao
   if (points < 2500) {
     const pointsInTier = points - currentMin;
     const currentDivisionIndex = Math.floor(pointsInTier / POINTS_PER_DIVISION);
@@ -119,7 +103,6 @@ export function getNextTierProgress(points: number): {
     };
   }
 
-  // MASTER -> ULTIMATE (sem divisoes)
   return {
     nextTierLabel: 'D7 ULTIMATE',
     pointsNeeded: next.minPoints - points,
@@ -133,6 +116,13 @@ export function getNextTierProgress(points: number): {
 
 /**
  * Calcula quantos pontos uma partida da/tira.
+ * 
+ * Componentes:
+ * - Vitoria/Derrota: +18 / -12
+ * - Bonus de KDA: -6 a +12
+ * - Bonus de Assists (ARAM = teamwork): 0 a +6
+ * - Bonus de Dano (DPM): -4 a +8
+ * - Multiplicador de qualificacao: x2 nas primeiras 10 partidas
  */
 export function calculatePointsForMatch(
   match: MatchSummary,
@@ -141,8 +131,8 @@ export function calculatePointsForMatch(
   let points = match.win ? POINTS_WIN : POINTS_LOSS;
 
   // Bonus de KDA
-  const kda = match.deaths === 0 
-    ? (match.kills + match.assists) // perfeita = soma direta
+  const kda = match.deaths === 0
+    ? (match.kills + match.assists)
     : (match.kills + match.assists) / match.deaths;
 
   if (kda >= 6.0) points += 12;
@@ -152,9 +142,23 @@ export function calculatePointsForMatch(
   else if (kda >= 0.8) points -= 3;
   else points -= 6;
 
-  // Bonus de assists altas (ARAM = trabalho em equipe)
+  // Bonus de assists (ARAM = trabalho em equipe)
   if (match.assists >= 20) points += 6;
   else if (match.assists >= 15) points += 3;
+
+  // Bonus de DANO (DPM - dano por minuto)
+  // Protecao: partida muito curta (< 5 min) nao conta DPM (provavel remake/AFK)
+  const durationMinutes = match.durationSeconds / 60;
+  if (durationMinutes >= 5) {
+    const dpm = match.damageDealt / durationMinutes;
+
+    if (dpm >= 2500) points += 8;       // Carregador
+    else if (dpm >= 1800) points += 5;  // Excelente
+    else if (dpm >= 1200) points += 2;  // Bom
+    else if (dpm >= 800) points += 0;   // Mediano
+    else if (dpm >= 400) points -= 2;   // Fraco
+    else points -= 4;                    // AFK/Troll
+  }
 
   // Multiplicador de qualificacao
   if (isQualification) {
@@ -176,10 +180,6 @@ interface PlayerForRanking {
   aram_total_losses: number;
 }
 
-/**
- * Processa uma lista de novas partidas, salva no banco, e atualiza o player.
- * Retorna o estado final do player.
- */
 export async function processNewMatches(
   playerId: string,
   matches: MatchSummary[]
@@ -202,7 +202,6 @@ export async function processNewMatches(
     };
   }
 
-  // Pega estado atual do player
   const { data: player, error: playerErr } = await supabase
     .from('players')
     .select('id, d7_points, qualification_matches_played, aram_total_wins, aram_total_losses')
@@ -213,8 +212,6 @@ export async function processNewMatches(
     throw new Error(`Player nao encontrado: ${playerErr?.message}`);
   }
 
-  // Ordena partidas da mais antiga pra mais recente
-  // (importante: pontos sao cumulativos, ordem importa)
   const sortedMatches = [...matches].sort(
     (a, b) => a.playedAt.getTime() - b.playedAt.getTime()
   );
@@ -231,7 +228,7 @@ export async function processNewMatches(
     const isQualification = qualMatches < QUALIFICATION_MATCHES_REQUIRED;
     const pointsChange = calculatePointsForMatch(match, isQualification);
 
-    currentPoints = Math.max(0, currentPoints + pointsChange); // nao deixa negativo
+    currentPoints = Math.max(0, currentPoints + pointsChange);
     pointsGained += pointsChange;
 
     if (match.win) totalWins++;
@@ -265,7 +262,6 @@ export async function processNewMatches(
     });
   }
 
-  // Insere todas as partidas (com onConflict: ignora duplicatas)
   const { error: insertErr } = await supabase
     .from('aram_matches')
     .upsert(matchesToInsert, { onConflict: 'player_id,riot_match_id', ignoreDuplicates: true });
@@ -274,7 +270,6 @@ export async function processNewMatches(
     throw new Error(`Erro ao salvar partidas: ${insertErr.message}`);
   }
 
-  // Calcula tier final
   const isStillQualifying = qualMatches < QUALIFICATION_MATCHES_REQUIRED;
   let finalTier: Tier | 'UNRANKED' = 'UNRANKED';
   let finalDivision: Division | null = null;
@@ -285,7 +280,6 @@ export async function processNewMatches(
     finalDivision = tierInfo.division;
   }
 
-  // Atualiza o player
   const { error: updateErr } = await supabase
     .from('players')
     .update({
@@ -317,9 +311,6 @@ export async function processNewMatches(
   };
 }
 
-/**
- * Pega o estado completo do rank do jogador (pra exibir no perfil).
- */
 export async function getPlayerRankInfo(playerId: string): Promise<RankInfo | null> {
   const { data: player } = await supabase
     .from('players')
