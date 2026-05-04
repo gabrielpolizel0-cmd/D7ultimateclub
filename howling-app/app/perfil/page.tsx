@@ -1,161 +1,391 @@
-import MatchRow from "@/components/MatchRow";
-import LPChart from "@/components/LPChart";
-import { currentPlayer, recentMatches, lpHistory } from "@/data/players";
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { supabase } from '@/lib/supabaseClient';
+import { getTierAndDivision, getNextTierProgress } from '@/lib/ranking';
+
+interface Player {
+  id: string;
+  riot_game_name: string;
+  riot_tag_line: string;
+  summoner_level: number;
+  profile_icon_id: number | null;
+  d7_points: number;
+  d7_tier: string;
+  d7_division: string | null;
+  qualification_matches_played: number;
+  aram_total_wins: number;
+  aram_total_losses: number;
+  last_match_synced_at: string | null;
+  pix_key: string | null;
+  pix_key_type: string | null;
+}
+
+interface AramMatch {
+  id: string;
+  riot_match_id: string;
+  played_at: string;
+  duration_seconds: number;
+  champion_name: string | null;
+  kills: number;
+  deaths: number;
+  assists: number;
+  kda: number;
+  result: string;
+  was_qualification: boolean;
+  points_change: number;
+  points_after: number;
+}
+
+const TIER_COLORS: Record<string, string> = {
+  UNRANKED: 'text-gray-500 border-gray-700',
+  BRONZE: 'text-orange-700 border-orange-700',
+  SILVER: 'text-gray-300 border-gray-400',
+  GOLD: 'text-yellow-500 border-yellow-500',
+  PLATINUM: 'text-cyan-400 border-cyan-400',
+  DIAMOND: 'text-blue-400 border-blue-400',
+  MASTER: 'text-purple-400 border-purple-400',
+  ULTIMATE: 'text-emerald-400 border-emerald-400',
+};
 
 export default function PerfilPage() {
-  const initials = currentPlayer.displayName
-    .split(" ")
-    .map((n: string) => n[0])
-    .slice(0, 2)
-    .join("");
+  const router = useRouter();
+  const [player, setPlayer] = useState<Player | null>(null);
+  const [matches, setMatches] = useState<AramMatch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [pixKey, setPixKey] = useState('');
+  const [pixKeyType, setPixKeyType] = useState('email');
+  const [savingPix, setSavingPix] = useState(false);
+  const [pixSaved, setPixSaved] = useState(false);
 
-  const tierName = currentPlayer.rank.tier === "PLATINUM" ? "PLATINA" : currentPlayer.rank.tier;
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  async function loadProfile() {
+    setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    const { data: playerData } = await supabase
+      .from('players')
+      .select('*')
+      .eq('auth_user_id', user.id)
+      .maybeSingle();
+
+    if (!playerData) {
+      router.push('/');
+      return;
+    }
+
+    setPlayer(playerData);
+    setPixKey(playerData.pix_key || '');
+    setPixKeyType(playerData.pix_key_type || 'email');
+
+    // Carrega ultimas 20 partidas
+    const { data: matchesData } = await supabase
+      .from('aram_matches')
+      .select('*')
+      .eq('player_id', playerData.id)
+      .order('played_at', { ascending: false })
+      .limit(20);
+
+    setMatches(matchesData || []);
+    setLoading(false);
+  }
+
+  async function handleSync() {
+    setSyncing(true);
+    setSyncMessage(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Voce precisa estar logado');
+
+      const res = await fetch('/api/sync-matches', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || 'Erro ao sincronizar');
+      }
+
+      setSyncMessage(result.message);
+      await loadProfile();
+    } catch (e: any) {
+      setSyncMessage(`Erro: ${e.message}`);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function handleSavePix() {
+    if (!player) return;
+    setSavingPix(true);
+    setPixSaved(false);
+
+    const { error } = await supabase
+      .from('players')
+      .update({
+        pix_key: pixKey || null,
+        pix_key_type: pixKey ? pixKeyType : null,
+      })
+      .eq('id', player.id);
+
+    if (!error) {
+      setPixSaved(true);
+      setTimeout(() => setPixSaved(false), 3000);
+    }
+    setSavingPix(false);
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-gray-400">Carregando perfil...</p>
+      </div>
+    );
+  }
+
+  if (!player) return null;
+
+  const isQualifying = player.qualification_matches_played < 10;
+  const totalMatches = player.aram_total_wins + player.aram_total_losses;
+  const winrate = totalMatches > 0
+    ? ((player.aram_total_wins / totalMatches) * 100).toFixed(1)
+    : '0.0';
+
+  const avgKda = matches.length > 0
+    ? (matches.reduce((sum, m) => sum + Number(m.kda), 0) / matches.length).toFixed(2)
+    : '0.00';
+
+  const tierColor = TIER_COLORS[player.d7_tier] || TIER_COLORS.UNRANKED;
+  const progress = !isQualifying ? getNextTierProgress(player.d7_points) : null;
 
   return (
-    <div className="container-custom py-12">
-      <div className="mb-10">
-        <div className="font-mono text-[11px] text-text-dim uppercase tracking-widest mb-2">
-          Meu perfil
+    <div className="min-h-screen bg-black text-white">
+      <div className="max-w-6xl mx-auto px-6 py-10">
+        {/* Cabecalho */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-1">Meu Perfil</h1>
+          <p className="text-gray-400 text-sm">
+            {player.riot_game_name}#{player.riot_tag_line} · Level {player.summoner_level}
+          </p>
         </div>
-        <div className="flex items-center gap-5">
-          <div
-            className="w-20 h-20 rounded-full bg-gradient-to-br from-rank-diamond to-rank-master flex items-center justify-center font-extrabold text-3xl border-2 border-rank-plat"
-            style={{ boxShadow: "0 0 24px rgba(95, 201, 201, 0.35)" }}
+
+        {/* Card de Rank */}
+        <div className={`mb-8 p-8 bg-gray-900/50 border-2 rounded-2xl ${tierColor}`}>
+          <p className="text-xs uppercase tracking-widest text-gray-500 mb-2">D7 Rank</p>
+
+          {isQualifying ? (
+            <div>
+              <h2 className="text-3xl font-extrabold mb-3">EM QUALIFICAÇÃO</h2>
+              <div className="w-full bg-gray-800 rounded-full h-3 mb-2">
+                <div
+                  className="bg-emerald-500 h-3 rounded-full transition-all"
+                  style={{ width: `${(player.qualification_matches_played / 10) * 100}%` }}
+                ></div>
+              </div>
+              <p className="text-sm text-gray-400">
+                <span className="font-bold text-white">{player.qualification_matches_played}/10</span> partidas
+                qualificatorias jogadas
+              </p>
+              <p className="text-xs text-gray-500 mt-2">
+                Faltam {10 - player.qualification_matches_played} partidas pra descobrir seu rank no D7!
+              </p>
+            </div>
+          ) : (
+            <div>
+              <h2 className="text-4xl font-extrabold mb-1">
+                {player.d7_tier} {player.d7_division || ''}
+              </h2>
+              <p className="text-2xl font-mono mb-3">{player.d7_points} pts</p>
+              {progress && progress.pointsNeeded > 0 && (
+                <>
+                  <p className="text-xs text-gray-400 mb-2">
+                    Próximo: <span className="text-white font-bold">{progress.nextTierLabel}</span>
+                    {' · '}faltam {progress.pointsNeeded} pts
+                  </p>
+                  <div className="w-full bg-gray-800 rounded-full h-2">
+                    <div
+                      className="bg-emerald-500 h-2 rounded-full transition-all"
+                      style={{ width: `${progress.percentInCurrent}%` }}
+                    ></div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Botao de sincronizar */}
+        <div className="mb-8">
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-700 text-black font-bold rounded-lg transition-colors"
           >
-            {initials}
-          </div>
-          <div>
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-              {currentPlayer.displayName}
-            </h1>
-            <div className="font-mono text-sm text-text-soft mt-1">
-              {currentPlayer.riotId} · {currentPlayer.city}, {currentPlayer.state}
+            {syncing ? 'Sincronizando partidas...' : 'Atualizar minhas partidas'}
+          </button>
+          {player.last_match_synced_at && (
+            <p className="text-xs text-gray-500 mt-2">
+              Última sincronização: {new Date(player.last_match_synced_at).toLocaleString('pt-BR')}
+            </p>
+          )}
+          {syncMessage && (
+            <div className={`mt-3 p-3 rounded-lg text-sm ${
+              syncMessage.startsWith('Erro')
+                ? 'bg-red-900/30 border border-red-700 text-red-300'
+                : 'bg-emerald-900/30 border border-emerald-700 text-emerald-300'
+            }`}>
+              {syncMessage}
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-6">
-        {/* Sidebar */}
-        <div className="space-y-5">
-          {/* Rank */}
-          <div className="bg-bg-elevated border border-border rounded-2xl p-7">
-            <div className="font-mono text-[11px] text-text-dim uppercase tracking-widest mb-4">
-              Ranking ARAM
-            </div>
-            <div className="bg-bg-card border border-border rounded-xl p-5 text-center">
-              <div className="text-3xl font-extrabold text-rank-plat tracking-tight">
-                {tierName} {currentPlayer.rank.division}
-              </div>
-              <div className="font-mono text-base text-text-soft mt-2">
-                {currentPlayer.rank.lp.toLocaleString("pt-BR")} LP
-              </div>
-              <div className="text-sm text-text-soft mt-3">
-                #
-                <strong className="text-accent font-mono">
-                  {currentPlayer.rank.position.toLocaleString("pt-BR")}
-                </strong>{" "}
-                de{" "}
-                <strong className="text-accent font-mono">
-                  {currentPlayer.rank.totalPlayers.toLocaleString("pt-BR")}
-                </strong>
-              </div>
-              <div className="mt-2 text-xs text-text-dim">
-                Top{" "}
-                {Math.round((currentPlayer.rank.position / currentPlayer.rank.totalPlayers) * 100)}%
-                nacional
-              </div>
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="bg-bg-elevated border border-border rounded-2xl p-7">
-            <div className="font-mono text-[11px] text-text-dim uppercase tracking-widest mb-4">
-              Estatísticas
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Stat
-                label="Vitórias"
-                value={<span className="text-accent">{currentPlayer.stats.wins}</span>}
-              />
-              <Stat
-                label="Derrotas"
-                value={<span className="text-danger">{currentPlayer.stats.losses}</span>}
-              />
-              <Stat
-                label="Winrate"
-                value={<span className="text-accent">{currentPlayer.stats.winrate}%</span>}
-              />
-              <Stat label="KDA médio" value={currentPlayer.stats.avgKda.toFixed(2)} />
-              <Stat
-                label="MVPs"
-                value={<span className="text-gold">{currentPlayer.stats.mvps}</span>}
-              />
-              <Stat label="Total partidas" value={currentPlayer.stats.totalMatches} />
-            </div>
-          </div>
-
-          {/* Premium CTA */}
-          <div className="bg-gradient-to-br from-rank-master/20 to-rank-diamond/10 border border-rank-master/30 rounded-2xl p-6">
-            <div className="font-mono text-[11px] text-rank-master uppercase tracking-widest mb-2 font-semibold">
-              ⭐ Premium
-            </div>
-            <div className="text-base font-bold mb-2">Desbloqueie estatísticas avançadas</div>
-            <div className="text-[13px] text-text-soft mb-4">
-              Histórico ilimitado, winrate por campeão, comparação com amigos e torneios exclusivos.
-            </div>
-            <button className="btn-primary w-full">Ver Premium · R$ 19,90/mês</button>
-          </div>
+          )}
         </div>
 
-        {/* Main */}
-        <div className="space-y-6">
-          {/* LP Chart */}
-          <div className="bg-bg-elevated border border-border rounded-2xl p-7">
-            <div className="flex justify-between items-center mb-5">
-              <div>
-                <div className="text-lg font-bold">Evolução de LP</div>
-                <div className="text-xs text-text-soft mt-0.5">Últimas 20 partidas</div>
-              </div>
-              <div className="text-right">
-                <div className="font-mono text-2xl font-bold text-accent">
-                  +{lpHistory[lpHistory.length - 1] - lpHistory[0]}
-                </div>
-                <div className="text-xs text-text-soft mt-0.5">no período</div>
-              </div>
-            </div>
-            <div className="h-56 bg-bg-card border border-border-soft rounded-lg p-4">
-              <LPChart data={lpHistory} />
-            </div>
-          </div>
+        {/* Estatisticas ARAM */}
+        <div className="mb-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Stat label="Partidas" value={String(totalMatches)} />
+          <Stat label="Vitórias" value={String(player.aram_total_wins)} color="text-emerald-400" />
+          <Stat label="Derrotas" value={String(player.aram_total_losses)} color="text-red-400" />
+          <Stat label="Win Rate" value={`${winrate}%`} />
+        </div>
 
-          {/* Recent matches */}
-          <div className="bg-bg-elevated border border-border rounded-2xl p-7">
-            <div className="text-lg font-bold mb-5">Partidas recentes</div>
-            <div className="flex flex-col gap-1.5">
-              {recentMatches.map((m) => (
+        {/* Ultimas Partidas */}
+        <div className="mb-8">
+          <h2 className="text-xl font-bold mb-4">Últimas partidas ARAM</h2>
+          {matches.length === 0 ? (
+            <div className="p-8 bg-gray-900/50 border border-gray-800 rounded-lg text-center">
+              <p className="text-gray-400 text-sm">
+                Nenhuma partida sincronizada ainda. Clica em &quot;Atualizar minhas partidas&quot; pra puxar
+                seu histórico do LoL.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {matches.map((m) => (
                 <MatchRow key={m.id} match={m} />
               ))}
             </div>
-            <div className="mt-5 text-center">
-              <button className="text-accent text-sm font-medium hover:underline">
-                Ver mais partidas (premium) →
-              </button>
-            </div>
-          </div>
+          )}
         </div>
+
+        {/* Chave PIX */}
+        <div className="mb-8 p-6 bg-gray-900/50 border border-gray-800 rounded-lg">
+          <h2 className="text-xl font-bold mb-1">Chave PIX</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            Cadastre sua chave PIX pra receber premiações de torneios.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-3 mb-3">
+            <select
+              value={pixKeyType}
+              onChange={(e) => setPixKeyType(e.target.value)}
+              className="px-4 py-2 bg-black border border-gray-700 rounded text-white"
+            >
+              <option value="email">E-mail</option>
+              <option value="cpf">CPF</option>
+              <option value="cnpj">CNPJ</option>
+              <option value="phone">Telefone</option>
+              <option value="random">Chave aleatória</option>
+            </select>
+            <input
+              type="text"
+              value={pixKey}
+              onChange={(e) => setPixKey(e.target.value)}
+              placeholder="Sua chave PIX"
+              className="px-4 py-2 bg-black border border-gray-700 rounded text-white"
+            />
+          </div>
+
+          <button
+            onClick={handleSavePix}
+            disabled={savingPix}
+            className="px-5 py-2 bg-gray-800 hover:bg-gray-700 disabled:bg-gray-900 text-white text-sm font-medium rounded transition-colors"
+          >
+            {savingPix ? 'Salvando...' : 'Salvar chave PIX'}
+          </button>
+
+          {pixSaved && (
+            <span className="ml-3 text-emerald-400 text-sm">Chave salva!</span>
+          )}
+        </div>
+
+        <Link href="/" className="text-emerald-400 text-sm hover:underline">
+          ← Voltar pro inicio
+        </Link>
       </div>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: React.ReactNode }) {
+function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="bg-bg-card border border-border-soft rounded-lg p-3">
-      <div className="text-[10px] text-text-dim uppercase tracking-wider font-medium mb-1">
-        {label}
+    <div className="p-4 bg-gray-900/50 border border-gray-800 rounded-lg">
+      <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{label}</p>
+      <p className={`text-2xl font-bold font-mono ${color || 'text-white'}`}>{value}</p>
+    </div>
+  );
+}
+
+function MatchRow({ match }: { match: AramMatch }) {
+  const isWin = match.result === 'win';
+  const date = new Date(match.played_at);
+  const dateStr = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const timeStr = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const minutes = Math.floor(match.duration_seconds / 60);
+
+  return (
+    <div className={`p-3 border rounded-lg flex items-center gap-3 ${
+      isWin ? 'bg-emerald-900/10 border-emerald-900/40' : 'bg-red-900/10 border-red-900/40'
+    }`}>
+      <div className={`w-2 h-12 rounded ${isWin ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+      <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+        <div>
+          <p className={`font-bold ${isWin ? 'text-emerald-400' : 'text-red-400'}`}>
+            {isWin ? 'VITÓRIA' : 'DERROTA'}
+          </p>
+          <p className="text-xs text-gray-500">{dateStr} {timeStr}</p>
+        </div>
+        <div>
+          <p className="text-gray-400 text-xs">Campeão</p>
+          <p className="font-medium">{match.champion_name || '?'}</p>
+        </div>
+        <div>
+          <p className="text-gray-400 text-xs">KDA</p>
+          <p className="font-mono">
+            {match.kills}/{match.deaths}/{match.assists}{' '}
+            <span className="text-gray-500">({Number(match.kda).toFixed(2)})</span>
+          </p>
+        </div>
+        <div>
+          <p className="text-gray-400 text-xs">Duração</p>
+          <p className="font-mono">{minutes}min</p>
+        </div>
+        <div>
+          <p className="text-gray-400 text-xs">
+            Pontos {match.was_qualification && <span className="text-yellow-400">(Q)</span>}
+          </p>
+          <p className={`font-mono font-bold ${
+            match.points_change > 0 ? 'text-emerald-400' : 'text-red-400'
+          }`}>
+            {match.points_change > 0 ? '+' : ''}
+            {match.points_change}
+          </p>
+        </div>
       </div>
-      <div className="text-lg font-bold font-mono">{value}</div>
     </div>
   );
 }

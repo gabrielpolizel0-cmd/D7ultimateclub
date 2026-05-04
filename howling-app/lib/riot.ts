@@ -1,12 +1,13 @@
-const RIOT_API_KEY = process.env.RIOT_API_KEY!;
+const RIOT_API_KEY = process.env.RIOT_API_KEY;
 
 if (!RIOT_API_KEY) {
-  throw new Error('RIOT_API_KEY não configurada no .env.local');
+  console.warn('[riot.ts] RIOT_API_KEY nao configurada - rotas que dependem dela vao falhar');
 }
 
-// Regiões da Riot (BR1 = Brasil, AMERICAS = continente)
-const PLATFORM_BR1 = 'https://br1.api.riotgames.com';
-const REGIONAL_AMERICAS = 'https://americas.api.riotgames.com';
+const AMERICAS_BASE = 'https://americas.api.riotgames.com';
+const BR1_BASE = 'https://br1.api.riotgames.com';
+
+const ARAM_QUEUE_ID = 450;
 
 interface RiotAccount {
   puuid: string;
@@ -14,101 +15,191 @@ interface RiotAccount {
   tagLine: string;
 }
 
-interface SummonerData {
+interface RiotSummoner {
   id: string;
   accountId: string;
   puuid: string;
   profileIconId: number;
+  revisionDate: number;
   summonerLevel: number;
 }
 
-interface RankedEntry {
+interface RiotLeagueEntry {
+  leagueId: string;
   queueType: string;
   tier: string;
   rank: string;
+  summonerId: string;
   leaguePoints: number;
   wins: number;
   losses: number;
+  veteran: boolean;
+  inactive: boolean;
+  freshBlood: boolean;
+  hotStreak: boolean;
 }
 
-/**
- * Busca conta Riot pelo Riot ID (gameName#tagLine)
- */
+export interface MatchSummary {
+  matchId: string;
+  queueId: number;
+  playedAt: Date;
+  durationSeconds: number;
+  championId: number;
+  championName: string;
+  kills: number;
+  deaths: number;
+  assists: number;
+  damageDealt: number;
+  damageTaken: number;
+  goldEarned: number;
+  win: boolean;
+}
+
+export interface FullPlayerData {
+  account: RiotAccount;
+  summoner: RiotSummoner;
+  ranked: RiotLeagueEntry | null;
+}
+
+async function riotFetch(url: string) {
+  if (!RIOT_API_KEY) {
+    throw new Error('RIOT_API_KEY nao configurada no .env.local');
+  }
+
+  const res = await fetch(url, {
+    headers: { 'X-Riot-Token': RIOT_API_KEY },
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Riot API error ${res.status}: ${body}`);
+  }
+
+  return res.json();
+}
+
+// ============================================
+// FUNCOES BASICAS (ja existentes)
+// ============================================
+
 export async function getAccountByRiotId(gameName: string, tagLine: string): Promise<RiotAccount> {
-  const url = `${REGIONAL_AMERICAS}/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`;
-  
-  const response = await fetch(url, {
-    headers: { 'X-Riot-Token': RIOT_API_KEY },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Riot API error: ${response.status} - ${await response.text()}`);
-  }
-
-  return response.json();
+  const url = `${AMERICAS_BASE}/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(
+    gameName
+  )}/${encodeURIComponent(tagLine)}`;
+  return riotFetch(url);
 }
 
-/**
- * Busca dados de summoner pelo PUUID
- */
-export async function getSummonerByPuuid(puuid: string): Promise<SummonerData> {
-  const url = `${PLATFORM_BR1}/lol/summoner/v4/summoners/by-puuid/${puuid}`;
-  
-  const response = await fetch(url, {
-    headers: { 'X-Riot-Token': RIOT_API_KEY },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Riot API error: ${response.status} - ${await response.text()}`);
-  }
-
-  return response.json();
+export async function getSummonerByPuuid(puuid: string): Promise<RiotSummoner> {
+  const url = `${BR1_BASE}/lol/summoner/v4/summoners/by-puuid/${puuid}`;
+  return riotFetch(url);
 }
 
-/**
- * Busca o rank do jogador (Solo/Duo, Flex, etc.)
- */
-export async function getRankedBySummonerId(summonerId: string): Promise<RankedEntry[]> {
-  const url = `${PLATFORM_BR1}/lol/league/v4/entries/by-summoner/${summonerId}`;
-  
-  const response = await fetch(url, {
-    headers: { 'X-Riot-Token': RIOT_API_KEY },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Riot API error: ${response.status} - ${await response.text()}`);
-  }
-
-  return response.json();
+export async function getRankedBySummonerId(summonerId: string): Promise<RiotLeagueEntry | null> {
+  const url = `${BR1_BASE}/lol/league/v4/entries/by-summoner/${summonerId}`;
+  const entries: RiotLeagueEntry[] = await riotFetch(url);
+  const soloDuo = entries.find((e) => e.queueType === 'RANKED_SOLO_5x5');
+  return soloDuo || null;
 }
 
-/**
- * Função "tudo em um" com DEBUG: pega Riot ID e retorna tudo do jogador
- */
-export async function getFullPlayerData(gameName: string, tagLine: string) {
-  console.log('🔍 [1/3] Buscando conta:', gameName, '#', tagLine);
+export async function getFullPlayerData(gameName: string, tagLine: string): Promise<FullPlayerData> {
   const account = await getAccountByRiotId(gameName, tagLine);
-  console.log('✅ [1/3] Conta encontrada:', account);
-  
-  console.log('🔍 [2/3] Buscando summoner com PUUID:', account.puuid);
-  let summoner = null;
+  const summoner = await getSummonerByPuuid(account.puuid);
+
+  let ranked: RiotLeagueEntry | null = null;
   try {
-    summoner = await getSummonerByPuuid(account.puuid);
-    console.log('✅ [2/3] Summoner encontrado:', summoner);
-  } catch (e: any) {
-    console.error('❌ [2/3] Erro ao buscar summoner:', e.message);
-    return { account, summoner: null, ranked: [], debug: 'Falha em summoner-v4 (BR1)' };
+    if (summoner.id) {
+      ranked = await getRankedBySummonerId(summoner.id);
+    }
+  } catch (e) {
+    console.warn('[riot.ts] erro ao buscar ranked, ignorando:', e);
   }
-  
-  console.log('🔍 [3/3] Buscando ranked com ID:', summoner.id);
-  let ranked: RankedEntry[] = [];
-  try {
-    ranked = await getRankedBySummonerId(summoner.id);
-    console.log('✅ [3/3] Ranked encontrado:', ranked);
-  } catch (e: any) {
-    console.error('❌ [3/3] Erro ao buscar ranked:', e.message);
-    return { account, summoner, ranked: [], debug: 'Falha em league-v4 (BR1)' };
-  }
-  
+
   return { account, summoner, ranked };
+}
+
+// ============================================
+// FUNCOES NOVAS PRA SISTEMA DE RANKING ARAM
+// ============================================
+
+/**
+ * Pega os IDs das ultimas partidas ARAM do jogador.
+ * @param puuid PUUID do jogador
+ * @param count quantas partidas pegar (max 100)
+ * @param startTime timestamp (em segundos) - so partidas APOS esse momento
+ */
+export async function getAramMatchIds(
+  puuid: string,
+  count: number = 20,
+  startTime?: number
+): Promise<string[]> {
+  let url = `${AMERICAS_BASE}/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=${ARAM_QUEUE_ID}&count=${count}`;
+
+  if (startTime) {
+    url += `&startTime=${startTime}`;
+  }
+
+  return riotFetch(url);
+}
+
+/**
+ * Pega detalhes de uma partida especifica.
+ */
+export async function getMatchDetails(matchId: string): Promise<any> {
+  const url = `${AMERICAS_BASE}/lol/match/v5/matches/${matchId}`;
+  return riotFetch(url);
+}
+
+/**
+ * Pega detalhes de uma partida e extrai SO os dados do jogador especifico.
+ */
+export async function getMatchSummaryForPlayer(
+  matchId: string,
+  puuid: string
+): Promise<MatchSummary | null> {
+  const match = await getMatchDetails(matchId);
+
+  // Encontra o participante que e o jogador
+  const participant = match.info.participants.find((p: any) => p.puuid === puuid);
+
+  if (!participant) {
+    console.warn(`[riot.ts] jogador ${puuid} nao encontrado na partida ${matchId}`);
+    return null;
+  }
+
+  return {
+    matchId,
+    queueId: match.info.queueId,
+    playedAt: new Date(match.info.gameStartTimestamp),
+    durationSeconds: match.info.gameDuration,
+    championId: participant.championId,
+    championName: participant.championName,
+    kills: participant.kills,
+    deaths: participant.deaths,
+    assists: participant.assists,
+    damageDealt: participant.totalDamageDealtToChampions,
+    damageTaken: participant.totalDamageTaken,
+    goldEarned: participant.goldEarned,
+    win: participant.win,
+  };
+}
+
+/**
+ * Pega resumos de varias partidas de uma vez (busca em paralelo).
+ * @param matchIds Array de IDs de partidas
+ * @param puuid PUUID do jogador (pra extrair so dele)
+ */
+export async function getMatchSummaries(
+  matchIds: string[],
+  puuid: string
+): Promise<MatchSummary[]> {
+  const promises = matchIds.map((id) => 
+    getMatchSummaryForPlayer(id, puuid).catch((e) => {
+      console.warn(`[riot.ts] erro pegando match ${id}:`, e.message);
+      return null;
+    })
+  );
+
+  const results = await Promise.all(promises);
+  return results.filter((r): r is MatchSummary => r !== null);
 }

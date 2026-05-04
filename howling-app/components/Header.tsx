@@ -78,6 +78,9 @@ export default function Header() {
         <nav className="hidden md:flex items-center gap-6">
           <Link href="/" className="text-gray-400 hover:text-white transition-colors">Inicio</Link>
           <Link href="/torneios" className="text-gray-400 hover:text-white transition-colors">Torneios</Link>
+          {player && (
+            <Link href="/perfil" className="text-gray-400 hover:text-white transition-colors">Meu perfil</Link>
+          )}
         </nav>
 
         {/* Area de usuario */}
@@ -127,9 +130,17 @@ export default function Header() {
                     <p className="text-xs text-gray-400">Level {player.summoner_level}</p>
                   </div>
                   
+                  <Link
+                    href="/perfil"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-3 text-sm hover:bg-gray-800 transition-colors"
+                  >
+                    Meu perfil
+                  </Link>
+
                   <button
                     onClick={handleLogout}
-                    className="w-full text-left px-4 py-3 text-sm hover:bg-red-900/30 text-red-400 transition-colors"
+                    className="w-full text-left px-4 py-3 text-sm hover:bg-red-900/30 text-red-400 transition-colors border-t border-gray-800"
                   >
                     Sair
                   </button>
