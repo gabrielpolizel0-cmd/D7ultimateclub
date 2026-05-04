@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
-import { getNextTierProgress } from '@/lib/ranking';
 
 interface Player {
   id: string;
@@ -12,39 +11,18 @@ interface Player {
   riot_tag_line: string;
   summoner_level: number;
   profile_icon_id: number | null;
-  d7_points: number;
-  d7_tier: string;
-  d7_division: string | null;
-  qualification_matches_played: number;
-  aram_total_wins: number;
-  aram_total_losses: number;
-  last_match_synced_at: string | null;
   pix_key: string | null;
   pix_key_type: string | null;
 }
-
-const TIER_COLORS: Record<string, string> = {
-  UNRANKED: 'text-gray-500 border-gray-700',
-  BRONZE: 'text-orange-700 border-orange-700',
-  SILVER: 'text-gray-300 border-gray-400',
-  GOLD: 'text-yellow-500 border-yellow-500',
-  PLATINUM: 'text-cyan-400 border-cyan-400',
-  DIAMOND: 'text-blue-400 border-blue-400',
-  MASTER: 'text-purple-400 border-purple-400',
-  ULTIMATE: 'text-emerald-400 border-emerald-400',
-};
 
 export default function PerfilPage() {
   const router = useRouter();
   const [player, setPlayer] = useState<Player | null>(null);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [pixKey, setPixKey] = useState('');
   const [pixKeyType, setPixKeyType] = useState('email');
   const [savingPix, setSavingPix] = useState(false);
   const [pixSaved, setPixSaved] = useState(false);
-  const [debugLoading, setDebugLoading] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -60,7 +38,7 @@ export default function PerfilPage() {
 
     const { data: playerData } = await supabase
       .from('players')
-      .select('*')
+      .select('id, riot_game_name, riot_tag_line, summoner_level, profile_icon_id, pix_key, pix_key_type')
       .eq('auth_user_id', user.id)
       .maybeSingle();
 
@@ -73,69 +51,6 @@ export default function PerfilPage() {
     setPixKey(playerData.pix_key || '');
     setPixKeyType(playerData.pix_key_type || 'email');
     setLoading(false);
-  }
-
-  async function handleSync() {
-    setSyncing(true);
-    setSyncMessage(null);
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Voce precisa estar logado');
-
-      const res = await fetch('/api/sync-matches', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        throw new Error(result.error || 'Erro ao sincronizar');
-      }
-
-      setSyncMessage(result.message);
-      await loadProfile();
-    } catch (e: any) {
-      setSyncMessage(`Erro: ${e.message}`);
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  async function handleDebug() {
-    setDebugLoading(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        alert('Voce precisa estar logado');
-        return;
-      }
-
-      const res = await fetch('/api/debug-queues', {
-        headers: { 'Authorization': `Bearer ${session.access_token}` },
-      });
-      const data = await res.json();
-
-      console.log('==== DEBUG QUEUES ====');
-      console.log(data);
-      console.log('======================');
-
-      // Mostra um resumo no alert (compacto)
-      const resumo = data.partidas
-        ? data.partidas.map((p: any) =>
-            `Q${p.queueId} | ${p.gameMode} | ${p.campeao} ${p.kda} | ${p.jogadoEm}`
-          ).join('\n')
-        : JSON.stringify(data, null, 2);
-
-      alert('Resultado (veja tambem o Console F12):\n\n' + resumo);
-    } catch (e: any) {
-      alert('Erro: ' + e.message);
-    } finally {
-      setDebugLoading(false);
-    }
   }
 
   async function handleSavePix() {
@@ -168,15 +83,6 @@ export default function PerfilPage() {
 
   if (!player) return null;
 
-  const isQualifying = player.qualification_matches_played < 10;
-  const totalMatches = player.aram_total_wins + player.aram_total_losses;
-  const winrate = totalMatches > 0
-    ? ((player.aram_total_wins / totalMatches) * 100).toFixed(1)
-    : '0.0';
-
-  const tierColor = TIER_COLORS[player.d7_tier] || TIER_COLORS.UNRANKED;
-  const progress = !isQualifying ? getNextTierProgress(player.d7_points) : null;
-
   return (
     <div className="min-h-screen bg-black text-white">
       <div className="max-w-4xl mx-auto px-6 py-10">
@@ -188,94 +94,30 @@ export default function PerfilPage() {
           </p>
         </div>
 
-        {/* Card de Rank */}
-        <div className={`mb-8 p-8 bg-gray-900/50 border-2 rounded-2xl ${tierColor}`}>
-          <p className="text-xs uppercase tracking-widest text-gray-500 mb-2">D7 Rank · ARAM Desordem</p>
-
-          {isQualifying ? (
-            <div>
-              <h2 className="text-3xl font-extrabold mb-3">EM QUALIFICAÇÃO</h2>
-              <div className="w-full bg-gray-800 rounded-full h-3 mb-2">
-                <div
-                  className="bg-emerald-500 h-3 rounded-full transition-all"
-                  style={{ width: `${(player.qualification_matches_played / 10) * 100}%` }}
-                ></div>
-              </div>
-              <p className="text-sm text-gray-400">
-                <span className="font-bold text-white">{player.qualification_matches_played}/10</span> partidas
-                qualificatorias jogadas
-              </p>
-              <p className="text-xs text-gray-500 mt-2">
-                Faltam {10 - player.qualification_matches_played} partidas pra descobrir seu rank no D7!
-              </p>
-            </div>
-          ) : (
-            <div>
-              <h2 className="text-4xl font-extrabold mb-1">
-                {player.d7_tier} {player.d7_division || ''}
-              </h2>
-              <p className="text-2xl font-mono mb-3">{player.d7_points} pts</p>
-              {progress && progress.pointsNeeded > 0 && (
-                <>
-                  <p className="text-xs text-gray-400 mb-2">
-                    Próximo: <span className="text-white font-bold">{progress.nextTierLabel}</span>
-                    {' · '}faltam {progress.pointsNeeded} pts
-                  </p>
-                  <div className="w-full bg-gray-800 rounded-full h-2">
-                    <div
-                      className="bg-emerald-500 h-2 rounded-full transition-all"
-                      style={{ width: `${progress.percentInCurrent}%` }}
-                    ></div>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Botoes de a‪ção */}
-        <div className="mb-8 flex flex-wrap gap-3">
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-700 text-black font-bold rounded-lg transition-colors"
-          >
-            {syncing ? 'Sincronizando partidas...' : 'Atualizar minhas partidas'}
-          </button>
-
-          <button
-            onClick={handleDebug}
-            disabled={debugLoading}
-            className="px-4 py-3 bg-yellow-700 hover:bg-yellow-600 disabled:bg-gray-700 text-white text-sm rounded-lg transition-colors"
-          >
-            {debugLoading ? 'Buscando...' : '🔍 Debug Queues'}
-          </button>
-        </div>
-
-        {player.last_match_synced_at && (
-          <p className="text-xs text-gray-500 -mt-6 mb-6">
-            Última sincronização: {new Date(player.last_match_synced_at).toLocaleString('pt-BR')}
+        {/* Card "Em breve" - substitui o card de qualificacao */}
+        <div className="mb-8 p-6 bg-gray-900/50 border border-gray-800 rounded-2xl">
+          <p className="text-xs uppercase tracking-widest text-emerald-400/80 mb-2">D7 Ranking</p>
+          <h2 className="text-xl font-bold mb-2">Em breve</h2>
+          <p className="text-sm text-gray-400 leading-relaxed">
+            Estamos preparando o sistema de pontos por campeonatos. Em breve você poderá
+            acompanhar sua colocação no ranking nacional do D7.
           </p>
-        )}
+        </div>
 
-        {syncMessage && (
-          <div className={`mb-6 p-3 rounded-lg text-sm ${
-            syncMessage.startsWith('Erro')
-              ? 'bg-red-900/30 border border-red-700 text-red-300'
-              : 'bg-emerald-900/30 border border-emerald-700 text-emerald-300'
-          }`}>
-            {syncMessage}
-          </div>
-        )}
-
-        {/* Estatisticas ARAM */}
+        {/* Meus campeonatos - placeholder vazio */}
         <div className="mb-8">
-          <h2 className="text-xl font-bold mb-4">Estatísticas ARAM Desordem</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Stat label="Partidas" value={String(totalMatches)} />
-            <Stat label="Vitórias" value={String(player.aram_total_wins)} color="text-emerald-400" />
-            <Stat label="Derrotas" value={String(player.aram_total_losses)} color="text-red-400" />
-            <Stat label="Win Rate" value={`${winrate}%`} />
+          <h2 className="text-xl font-bold mb-4">Meus campeonatos</h2>
+          <div className="p-8 bg-gray-900/30 border border-dashed border-gray-800 rounded-2xl text-center">
+            <p className="text-sm text-gray-400 mb-1">
+              Você ainda não participou de nenhum campeonato.
+            </p>
+            <p className="text-xs text-gray-500">
+              Entre em um torneio na aba{' '}
+              <Link href="/torneios" className="text-emerald-400 hover:underline">
+                Torneios
+              </Link>{' '}
+              para começar.
+            </p>
           </div>
         </div>
 
@@ -324,15 +166,6 @@ export default function PerfilPage() {
           ← Voltar pro inicio
         </Link>
       </div>
-    </div>
-  );
-}
-
-function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="p-4 bg-gray-900/50 border border-gray-800 rounded-lg">
-      <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{label}</p>
-      <p className={`text-2xl font-bold font-mono ${color || 'text-white'}`}>{value}</p>
     </div>
   );
 }
