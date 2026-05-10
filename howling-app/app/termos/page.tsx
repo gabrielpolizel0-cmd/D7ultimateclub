@@ -15,12 +15,12 @@ export default function TermosPage() {
           Última atualização: 10 de maio de 2026
         </p>
 
-        <div className="prose-custom space-y-8 text-text-soft leading-relaxed">
+        <div className="space-y-8 text-text-soft leading-relaxed">
 
           <section>
             <p className="text-text">
               Bem-vindo ao <strong>D7 Ultimate Club</strong>. Ao usar este site
-              (d7ultimateclub.vercel.app) e participar dos torneios oferecidos, você concorda
+              (d7ultimateclub.com.br) e participar dos torneios oferecidos, você concorda
               com os termos abaixo. Se não concordar, não use a plataforma.
             </p>
           </section>
@@ -32,8 +32,8 @@ export default function TermosPage() {
               amadores de ARAM Desordem (modo Howling Mayhem) do jogo League of Legends.
               A plataforma é operada por <strong>Gabriel Polizel</strong>, pessoa física,
               brasileiro, residente no Brasil, contato:
-              <a href="mailto:gabrielpolizel0@gmail.com" className="text-accent hover:text-accent-deep">
-                {' '}gabrielpolizel0@gmail.com
+              <a href="mailto:contato@d7ultimateclub.com.br" className="text-accent hover:text-accent-deep">
+                {' '}contato@d7ultimateclub.com.br
               </a>
               .
             </p>
@@ -186,8 +186,8 @@ export default function TermosPage() {
           <section className="border-t border-border-soft pt-6">
             <p className="text-sm">
               Dúvidas sobre estes termos?{' '}
-              <a href="mailto:gabrielpolizel0@gmail.com" className="text-accent hover:text-accent-deep">
-                gabrielpolizel0@gmail.com
+              <a href="mailto:contato@d7ultimateclub.com.br" className="text-accent hover:text-accent-deep">
+                contato@d7ultimateclub.com.br
               </a>
             </p>
           </section>

@@ -26,7 +26,7 @@ export default function Footer() {
             League of Legends e Riot Games são marcas registradas da Riot Games, Inc.
           </div>
           <div className="text-[11px] text-text-dim mt-2">
-            Contato: <a href="mailto:gabrielpolizel0@gmail.com" className="hover:text-accent transition-colors">gabrielpolizel0@gmail.com</a>
+            Contato: <a href="mailto:contato@d7ultimateclub.com.br" className="hover:text-accent transition-colors">contato@d7ultimateclub.com.br</a>
           </div>
         </div>
         <div className="flex flex-wrap gap-x-6 gap-y-2">

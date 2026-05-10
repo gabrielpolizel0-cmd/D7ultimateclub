@@ -30,8 +30,8 @@ export default function PrivacidadePage() {
             <p>
               O controlador dos dados pessoais coletados nesta plataforma é{' '}
               <strong>Gabriel Polizel</strong>, pessoa física, contato:
-              <a href="mailto:gabrielpolizel0@gmail.com" className="text-accent hover:text-accent-deep">
-                {' '}gabrielpolizel0@gmail.com
+              <a href="mailto:contato@d7ultimateclub.com.br" className="text-accent hover:text-accent-deep">
+                {' '}contato@d7ultimateclub.com.br
               </a>
               .
             </p>
@@ -145,8 +145,8 @@ export default function PrivacidadePage() {
             </ul>
             <p className="mt-3">
               Para exercer qualquer um destes direitos, envie um e-mail para{' '}
-              <a href="mailto:gabrielpolizel0@gmail.com" className="text-accent hover:text-accent-deep">
-                gabrielpolizel0@gmail.com
+              <a href="mailto:contato@d7ultimateclub.com.br" className="text-accent hover:text-accent-deep">
+                contato@d7ultimateclub.com.br
               </a>
               . Responderemos em até 15 dias úteis.
             </p>
@@ -183,8 +183,8 @@ export default function PrivacidadePage() {
           <section className="border-t border-border-soft pt-6">
             <p className="text-sm">
               Dúvidas sobre privacidade ou exercício dos seus direitos:{' '}
-              <a href="mailto:gabrielpolizel0@gmail.com" className="text-accent hover:text-accent-deep">
-                gabrielpolizel0@gmail.com
+              <a href="mailto:contato@d7ultimateclub.com.br" className="text-accent hover:text-accent-deep">
+                contato@d7ultimateclub.com.br
               </a>
             </p>
           </section>
