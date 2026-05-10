@@ -46,14 +46,47 @@ function formatDateTime(s: string) {
   });
 }
 
+type AccessState = 'checking' | 'unauthorized' | 'not_admin' | 'admin';
+
 export default function AdminInscricoesPage({ params }: PageProps) {
   const router = useRouter();
+
+  // 🔐 Estado de acesso
+  const [access, setAccess] = useState<AccessState>('checking');
+
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'pending' | 'paid' | 'all'>('pending');
   const [acting, setActing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // 🔐 Verifica autenticação e admin
+  useEffect(() => {
+    async function checkAccess() {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        setAccess('unauthorized');
+        return;
+      }
+
+      const { data: player, error } = await supabase
+        .from('players')
+        .select('is_admin')
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (error || !player || !player.is_admin) {
+        setAccess('not_admin');
+        return;
+      }
+
+      setAccess('admin');
+    }
+
+    checkAccess();
+  }, []);
 
   async function loadData() {
     setLoading(true);
@@ -96,8 +129,10 @@ export default function AdminInscricoesPage({ params }: PageProps) {
   }
 
   useEffect(() => {
-    loadData();
-  }, [params.id]);
+    if (access === 'admin') {
+      loadData();
+    }
+  }, [params.id, access]);
 
   async function handleConfirm(reg: Registration) {
     if (!confirm(`Confirmar pagamento do time "${reg.team_name}"?`)) return;
@@ -170,6 +205,60 @@ export default function AdminInscricoesPage({ params }: PageProps) {
     setActing(null);
   }
 
+  // 🔐 Tela: verificando acesso
+  if (access === 'checking') {
+    return (
+      <div className="min-h-screen bg-bg text-text flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-border border-t-accent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-text-soft text-sm">Verificando acesso...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔐 Tela: não logado
+  if (access === 'unauthorized') {
+    return (
+      <div className="min-h-screen bg-bg text-text flex items-center justify-center p-8">
+        <div className="max-w-md text-center bg-bg-card border border-border rounded-lg p-8">
+          <p className="text-5xl mb-4">🔒</p>
+          <h1 className="text-2xl font-black mb-2">Acesso restrito</h1>
+          <p className="text-text-soft mb-6">
+            Você precisa estar logado pra acessar essa área.
+          </p>
+          <button
+            onClick={() => router.push('/login')}
+            className="px-6 py-3 bg-accent hover:bg-accent-deep text-bg font-bold rounded transition-colors"
+          >
+            Fazer login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔐 Tela: não é admin
+  if (access === 'not_admin') {
+    return (
+      <div className="min-h-screen bg-bg text-text flex items-center justify-center p-8">
+        <div className="max-w-md text-center bg-bg-card border border-border rounded-lg p-8">
+          <p className="text-5xl mb-4">🚫</p>
+          <h1 className="text-2xl font-black mb-2">Acesso negado</h1>
+          <p className="text-text-soft mb-6">
+            Essa área é exclusiva pra equipe administrativa do D7 Ultimate Club.
+          </p>
+          <button
+            onClick={() => router.push('/')}
+            className="px-6 py-3 bg-bg border border-border hover:border-accent text-text-soft hover:text-accent font-bold rounded transition-colors"
+          >
+            Voltar pra home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Estatísticas
   const total = registrations.length;
   const pendentes = registrations.filter(r => r.payment_status === 'pending').length;
@@ -219,9 +308,14 @@ export default function AdminInscricoesPage({ params }: PageProps) {
           >
             ← Voltar pro torneio
           </button>
-          <h1 className="text-3xl md:text-4xl font-black mb-2">
-            Admin · Inscrições
-          </h1>
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <h1 className="text-3xl md:text-4xl font-black">
+              Admin · Inscrições
+            </h1>
+            <span className="px-2 py-0.5 bg-accent/20 text-accent text-[10px] font-bold rounded uppercase tracking-wider">
+              👑 Admin
+            </span>
+          </div>
           <p className="text-text-soft">{tournament.name}</p>
         </div>
 
