@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signUp } from '@/lib/auth';
+import { fbqTrack } from '@/lib/pixel';
 
 export default function CadastroPage() {
   const router = useRouter();
@@ -30,6 +31,11 @@ export default function CadastroPage() {
       }
 
       await signUp({ email, password, gameName, tagLine });
+      
+      // 🎯 Meta Pixel: dispara evento de Lead / CompleteRegistration
+      // pra otimização de campanha
+      fbqTrack('Lead', { content_name: 'Cadastro D7' });
+      fbqTrack('CompleteRegistration', { content_name: 'Cadastro D7' });
       
       setSuccess(true);
       

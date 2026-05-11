@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
+import { fbqTrack } from '@/lib/pixel';
 
 // ============================================================
 // 🔧 CONFIGURAÇÃO PIX — vem das variáveis de ambiente
@@ -211,6 +212,17 @@ export default function RegistrationButton({
     }
 
     setRegistration(data as Registration);
+
+    // 🎯 Meta Pixel: dispara InitiateCheckout — o cara se inscreveu
+    // e agora vai pra tela de PIX. É o evento de intenção de compra.
+    fbqTrack('InitiateCheckout', {
+      content_name: 'Inscrição em torneio',
+      content_ids: [tournamentId],
+      content_type: 'tournament_registration',
+      value: entryFee,
+      currency: 'BRL',
+    });
+
     setSubmitting(false);
     await loadStatus();
     router.refresh();

@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { notFound } from 'next/navigation';
 import RegistrationButton from './RegistrationButton';
 import RegistrationsList from './RegistrationsList';
+import TournamentPixelView from './TournamentPixelView';
 
 export const dynamic = 'force-dynamic';
 
@@ -151,6 +152,11 @@ export default async function TournamentDetailPage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-bg text-text relative">
+      <TournamentPixelView
+        tournamentId={params.id}
+        tournamentName={tournament.name}
+        entryFee={inscricaoPorJogador}
+      />
       <div className="glow-bg" />
 
       {/* HERO */}
