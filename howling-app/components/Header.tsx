@@ -15,11 +15,12 @@ export default function Header() {
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState(0);
 
   useEffect(() => {
     async function loadPlayer() {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         setPlayer(null);
         setLoading(false);
@@ -35,6 +36,17 @@ export default function Header() {
       setPlayer(data);
       setImageError(false);
       setLoading(false);
+
+      // 🔔 Conta convites pendentes pro badge
+      if (data) {
+        const { count } = await supabase
+          .from('team_invites')
+          .select('*', { count: 'exact', head: true })
+          .eq('invited_player_id', data.id)
+          .eq('status', 'pending');
+
+        setPendingInvites(count || 0);
+      }
     }
 
     loadPlayer();
@@ -81,8 +93,22 @@ export default function Header() {
         <nav className="hidden md:flex items-center gap-6">
           <Link href="/" className="text-gray-400 hover:text-white transition-colors">Inicio</Link>
           <Link href="/torneios" className="text-gray-400 hover:text-white transition-colors">Torneios</Link>
+          <Link href="/times" className="text-gray-400 hover:text-white transition-colors">Times</Link>
           {player && (
             <Link href="/perfil" className="text-gray-400 hover:text-white transition-colors">Meu perfil</Link>
+          )}
+          {player && (
+            <Link
+              href="/convites"
+              className="relative text-gray-400 hover:text-white transition-colors"
+            >
+              Convites
+              {pendingInvites > 0 && (
+                <span className="absolute -top-2 -right-4 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {pendingInvites}
+                </span>
+              )}
+            </Link>
           )}
           {/* 🔐 Link Admin SÓ aparece se for admin */}
           {player?.is_admin && (
@@ -118,7 +144,7 @@ export default function Header() {
                     {player.riot_game_name[0]}
                   </div>
                 )}
-                
+
                 <div className="text-left">
                   <p className="text-sm font-bold">
                     {player.riot_game_name}#{player.riot_tag_line}
@@ -141,13 +167,34 @@ export default function Header() {
                     <p className="text-sm font-bold truncate">{player.riot_game_name}#{player.riot_tag_line}</p>
                     <p className="text-xs text-gray-400">Level {player.summoner_level}</p>
                   </div>
-                  
+
                   <Link
                     href="/perfil"
                     onClick={() => setMenuOpen(false)}
                     className="block px-4 py-3 text-sm hover:bg-gray-800 transition-colors"
                   >
                     Meu perfil
+                  </Link>
+
+                  <Link
+                    href="/times"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-3 text-sm hover:bg-gray-800 transition-colors"
+                  >
+                    Times
+                  </Link>
+
+                  <Link
+                    href="/convites"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center justify-between px-4 py-3 text-sm hover:bg-gray-800 transition-colors"
+                  >
+                    <span>Convites</span>
+                    {pendingInvites > 0 && (
+                      <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                        {pendingInvites}
+                      </span>
+                    )}
                   </Link>
 
                   {/* 🔐 Link Admin SÓ aparece se for admin (no mobile principalmente) */}
