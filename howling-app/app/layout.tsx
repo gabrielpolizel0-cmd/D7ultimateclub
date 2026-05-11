@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import MetaPixel from "./MetaPixel";
 
 export const metadata: Metadata = {
   title: "Howling — Plataforma de torneios de LoL",
@@ -13,6 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR">
       <body>
+        <MetaPixel />
         <div className="glow-bg"></div>
         <Header />
         <main>{children}</main>
