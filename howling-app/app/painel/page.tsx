@@ -214,6 +214,22 @@ export default function AdminIndexPage() {
           </div>
         </div>
 
+        {/* Atalhos rápidos */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
+          <Link
+            href="/painel/partidas"
+            className="bg-accent/10 border border-accent/30 hover:bg-accent/20 rounded-lg p-5 transition-colors group"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">⚔️</span>
+              <div>
+                <p className="font-black group-hover:text-accent">Registrar Partida</p>
+                <p className="text-xs text-text-soft">Cadastrar partida ARAM manualmente por print</p>
+              </div>
+            </div>
+          </Link>
+        </div>
+
         <h2 className="text-xl font-bold mb-4">Torneios</h2>
 
         {loading ? (

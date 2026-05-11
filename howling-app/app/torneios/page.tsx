@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import { supabase, Tournament } from '@/lib/supabaseClient';
 
-// Sem cache — sempre busca dados frescos
+// Anti-cache: força a página a ser sempre renderizada do zero
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 // Tipo estendido pra incluir entry_fee (existe no banco mas não no tipo base)
 type TournamentWithFee = Tournament & { entry_fee?: number | null };
