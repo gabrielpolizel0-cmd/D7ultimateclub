@@ -4,7 +4,7 @@ import Script from 'next/script'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useEffect, Suspense } from 'react'
 
-const PIXEL_ID = '1465160981429445'
+const PIXEL_ID = '1011886123087921'
 
 function PixelPageView() {
   const pathname = usePathname()
