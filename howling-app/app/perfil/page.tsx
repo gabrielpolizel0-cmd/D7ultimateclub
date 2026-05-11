@@ -15,6 +15,42 @@ interface Player {
   pix_key_type: string | null;
 }
 
+interface RankingPlayer {
+  id: string;
+  riot_game_name: string;
+  riot_tag_line: string;
+  d7_points: number;
+  profile_icon_id: number | null;
+}
+
+// Cores por tier
+const TIER_COLORS: Record<string, string> = {
+  ULTIMATE: 'text-fuchsia-400',
+  MASTER: 'text-purple-400',
+  DIAMOND: 'text-cyan-300',
+  PLATINUM: 'text-teal-300',
+  GOLD: 'text-yellow-400',
+  SILVER: 'text-gray-300',
+  BRONZE: 'text-orange-400',
+  UNRANKED: 'text-gray-500',
+};
+
+function getTierFromPoints(points: number): string {
+  if (points >= 1000) return 'ULTIMATE';
+  if (points >= 750) return 'MASTER';
+  if (points >= 500) return 'DIAMOND';
+  if (points >= 300) return 'PLATINUM';
+  if (points >= 150) return 'GOLD';
+  if (points >= 50) return 'SILVER';
+  if (points > 0) return 'BRONZE';
+  return 'UNRANKED';
+}
+
+function getProfileIconUrl(iconId: number | null): string | null {
+  if (!iconId) return null;
+  return `https://ddragon.leagueoflegends.com/cdn/16.9.1/img/profileicon/${iconId}.png`;
+}
+
 export default function PerfilPage() {
   const router = useRouter();
   const [player, setPlayer] = useState<Player | null>(null);
@@ -23,6 +59,12 @@ export default function PerfilPage() {
   const [pixKeyType, setPixKeyType] = useState('email');
   const [savingPix, setSavingPix] = useState(false);
   const [pixSaved, setPixSaved] = useState(false);
+
+  // Ranking
+  const [topPlayers, setTopPlayers] = useState<RankingPlayer[]>([]);
+  const [myPosition, setMyPosition] = useState<number | null>(null);
+  const [myPoints, setMyPoints] = useState<number>(0);
+  const [iJaJoguei, setIJaJoguei] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -50,6 +92,54 @@ export default function PerfilPage() {
     setPlayer(playerData);
     setPixKey(playerData.pix_key || '');
     setPixKeyType(playerData.pix_key_type || 'email');
+
+    // ===== Carrega ranking =====
+    // Pega ids dos jogadores que ja jogaram pelo menos 1 partida
+    const { data: matchesData } = await supabase
+      .from('aram_matches')
+      .select('player_id');
+
+    const playerIdsWhoPlayed = Array.from(new Set((matchesData || []).map(m => m.player_id)));
+
+    // Verifica se EU joguei
+    const meJaJoguei = playerIdsWhoPlayed.includes(playerData.id);
+    setIJaJoguei(meJaJoguei);
+
+    if (playerIdsWhoPlayed.length > 0) {
+      // Top 10 dos que jogaram
+      const { data: topData } = await supabase
+        .from('players')
+        .select('id, riot_game_name, riot_tag_line, d7_points, profile_icon_id')
+        .in('id', playerIdsWhoPlayed)
+        .order('d7_points', { ascending: false })
+        .limit(10);
+
+      if (topData) setTopPlayers(topData);
+    }
+
+    // Meus pontos
+    const { data: meData } = await supabase
+      .from('players')
+      .select('d7_points')
+      .eq('id', playerData.id)
+      .maybeSingle();
+
+    const points = meData?.d7_points || 0;
+    setMyPoints(points);
+
+    if (meJaJoguei) {
+      // Conta quantos dos que jogaram tem mais pontos que eu
+      const { count } = await supabase
+        .from('players')
+        .select('*', { count: 'exact', head: true })
+        .in('id', playerIdsWhoPlayed)
+        .gt('d7_points', points);
+
+      setMyPosition((count || 0) + 1);
+    } else {
+      setMyPosition(null);
+    }
+
     setLoading(false);
   }
 
@@ -83,6 +173,9 @@ export default function PerfilPage() {
 
   if (!player) return null;
 
+  const myTier = getTierFromPoints(myPoints);
+  const myTierColor = TIER_COLORS[myTier];
+
   return (
     <div className="min-h-screen bg-black text-white">
       <div className="max-w-4xl mx-auto px-6 py-10">
@@ -94,14 +187,123 @@ export default function PerfilPage() {
           </p>
         </div>
 
-        {/* Card "Em breve" - substitui o card de qualificacao */}
+        {/* ===== D7 RANKING - novo bloco com dados reais ===== */}
         <div className="mb-8 p-6 bg-gray-900/50 border border-gray-800 rounded-2xl">
-          <p className="text-xs uppercase tracking-widest text-emerald-400/80 mb-2">D7 Ranking</p>
-          <h2 className="text-xl font-bold mb-2">Em breve</h2>
-          <p className="text-sm text-gray-400 leading-relaxed">
-            Estamos preparando o sistema de pontos por campeonatos. Em breve você poderá
-            acompanhar sua colocação no ranking nacional do D7.
-          </p>
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-emerald-400/80 mb-1">D7 Ranking</p>
+              <h2 className="text-xl font-bold">Leaderboard nacional</h2>
+            </div>
+            <Link
+              href="/ranking"
+              className="text-xs text-emerald-400 hover:text-emerald-300 hover:underline"
+            >
+              Ver ranking completo →
+            </Link>
+          </div>
+
+          {/* Minha posicao destacada */}
+          {iJaJoguei && myPosition !== null ? (
+            <div className="mb-5 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+              <div className="flex items-center gap-4">
+                <div>
+                  <p className="text-xs text-emerald-400/80 uppercase tracking-wider mb-1">Sua posição</p>
+                  <p className="text-3xl font-black">#{myPosition}</p>
+                </div>
+                <div className="flex-1 border-l border-emerald-500/20 pl-4">
+                  <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Tier</p>
+                  <p className={`text-lg font-bold uppercase ${myTierColor}`}>{myTier}</p>
+                </div>
+                <div className="border-l border-emerald-500/20 pl-4">
+                  <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Pontos</p>
+                  <p className="text-2xl font-black font-mono">{myPoints}</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-5 p-4 bg-gray-900/50 border border-gray-800 rounded-lg text-center">
+              <p className="text-sm text-gray-400">
+                Você ainda não jogou nenhuma partida. Jogue em torneios pra entrar no ranking!
+              </p>
+            </div>
+          )}
+
+          {/* Top 10 */}
+          <div>
+            <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3">Top 10 Brasil</p>
+
+            {topPlayers.length === 0 ? (
+              <div className="p-6 text-center text-sm text-gray-500">
+                Ainda não há jogadores no ranking.
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {topPlayers.map((p, index) => {
+                  const position = index + 1;
+                  const isMe = p.id === player.id;
+                  const tier = getTierFromPoints(p.d7_points);
+                  const tierColor = TIER_COLORS[tier];
+                  const iconUrl = getProfileIconUrl(p.profile_icon_id);
+
+                  return (
+                    <div
+                      key={p.id}
+                      className={`flex items-center gap-3 px-3 py-2 rounded ${
+                        isMe
+                          ? 'bg-emerald-500/10 border border-emerald-500/30'
+                          : 'hover:bg-gray-800/50'
+                      } transition-colors`}
+                    >
+                      {/* Posicao */}
+                      <div className="w-7 text-center font-mono text-sm font-bold">
+                        {position <= 3 ? (
+                          <span className={
+                            position === 1 ? 'text-yellow-400' :
+                            position === 2 ? 'text-gray-300' :
+                            'text-orange-400'
+                          }>
+                            {position}
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">{position}</span>
+                        )}
+                      </div>
+
+                      {/* Icone */}
+                      {iconUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={iconUrl}
+                          alt={p.riot_game_name}
+                          className="w-8 h-8 rounded bg-gray-800 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
+                          {p.riot_game_name[0]}
+                        </div>
+                      )}
+
+                      {/* Nome */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold truncate">
+                          {p.riot_game_name}
+                          {isMe && <span className="ml-2 text-xs text-emerald-400">(você)</span>}
+                        </p>
+                        <p className={`text-[10px] uppercase tracking-wider font-bold ${tierColor}`}>
+                          {tier}
+                        </p>
+                      </div>
+
+                      {/* Pontos */}
+                      <div className="font-mono font-bold text-sm shrink-0">
+                        {p.d7_points} <span className="text-xs text-gray-500">pts</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Meus campeonatos - placeholder vazio */}
